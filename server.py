@@ -136,7 +136,7 @@ async def book_slot(data: BookingRequest):
     )
     
     try:
-        if ADMIN_CHAT_ID != 123456789:
+        if ADMIN_CHAT_ID != 2001448448:
             await bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text, parse_mode="Markdown")
     except Exception as e:
         print(f"Ошибка отправки уведомления админу: {e}")
