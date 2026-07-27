@@ -45,7 +45,7 @@
             margin-bottom: 16px;
         }
 
-        /* --- КАЛЕНДАРЬ --- */
+        /* КАЛЕНДАРЬ */
         .calendar-header {
             display: flex;
             justify-content: space-between;
@@ -103,7 +103,6 @@
             transition: all 0.2s;
         }
 
-        /* Состояния дней */
         .day-cell.available {
             background-color: var(--green-available);
             color: var(--green-text);
@@ -124,7 +123,7 @@
             box-shadow: 0 2px 8px rgba(255, 133, 161, 0.4);
         }
 
-        /* --- СЕТКА ВРЕМЕНИ --- */
+        /* СЕТКА ВРЕМЕНИ */
         .time-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -170,7 +169,7 @@
 <div class="container">
     <h2>✨ Запись в Сахарок_nails</h2>
 
-    <!-- Шаг 1: Выбор услуги -->
+    <!-- Шаг 1: Услуга -->
     <div class="card">
         <label><b>1. Выберите услугу:</b></label>
         <select id="serviceSelect" style="width:100%; padding:10px; margin-top:8px; border-radius:8px;">
@@ -183,10 +182,9 @@
     <!-- Шаг 2: Календарь -->
     <div class="card">
         <div class="calendar-header">
-            <span id="monthTitle">Июль 2026</span>
+            <span id="monthTitle">Выберите дату</span>
         </div>
 
-        <!-- Примечание / Легенда -->
         <div class="calendar-legend">
             <div class="legend-item">
                 <div class="legend-dot" style="background:#A5D6A7;"></div>
@@ -194,35 +192,32 @@
             </div>
             <div class="legend-item">
                 <div class="legend-dot" style="background:#C0C0C0;"></div>
-                <span>Нет мест / Прошел</span>
+                <span>Нет мест</span>
             </div>
         </div>
 
-        <div class="calendar-grid" id="calendarGrid">
-            <!-- Дни недели -->
-            <div class="day-name">Пн</div><div class="day-name">Вт</div><div class="day-name">Ср</div>
-            <div class="day-name">Чт</div><div class="day-name">Пт</div><div class="day-name">Сб</div><div class="day-name">Вс</div>
-            <!-- Дни месяца сгенерируются в JS -->
-        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
     </div>
 
     <!-- Шаг 3: Выбор времени -->
     <div class="card" id="timeSection" style="display:none;">
-        <label><b>3. Доступные слоты на <span id="selectedDateText"></span>:</b></label>
+        <label><b>3. Доступное время на <span id="selectedDateText"></span>:</b></label>
         <div class="time-grid" id="timeGrid"></div>
     </div>
 
-    <!-- Форма контактов -->
+    <!-- Шаг 4: Контакты -->
     <div class="card">
-        <input type="text" id="clientName" placeholder="Ваше имя" style="width:90%; padding:10px; margin-bottom:8px; border-radius:8px; border:1px solid #ddd;">
-        <input type="text" id="clientPhone" placeholder="Номер телефона" style="width:90%; padding:10px; border-radius:8px; border:1px solid #ddd;">
+        <label><b>4. Ваши контакты:</b></label>
+        <input type="text" id="clientName" placeholder="Ваше имя" style="width:90%; padding:10px; margin-top:8px; margin-bottom:8px; border-radius:8px; border:1px solid #ddd;">
+        <input type="text" id="clientPhone" placeholder="Номер телефона (+7...)" style="width:90%; padding:10px; border-radius:8px; border:1px solid #ddd;">
     </div>
 
     <button class="btn-submit" id="submitBtn" onclick="sendBooking()" disabled>Подтвердить запись</button>
-    <!-- Блок контактов и отмены записи -->
+
+    <!-- Плашка отмены записи -->
     <div class="info-box" style="background: #FFF8F9; border: 1px dashed var(--accent-pink); border-radius: 14px; padding: 14px; font-size: 13px; color: var(--text-dark); line-height: 1.5; margin-top: 16px;">
         💬 <b>Нужно перенести или отменить запись?</b><br>
-        Напишите нашему Telegram-боту: <a href="https://t.me/saharok_nails_bot" target="_blank" style="color: var(--accent-pink-hover); font-weight: 600; text-decoration: none;">@saharok_nails_bot</a> или свяжитесь с администратором.
+        Напишите нашему Telegram-боту или свяжитесь с администратором.
     </div>
 </div>
 
@@ -234,7 +229,6 @@
     let selectedDate = null;
     let selectedTime = null;
 
-    // 1. Загружаем реальные доступные даты из БД
     async function loadAvailableDates() {
         try {
             const res = await fetch("/api/available-dates");
@@ -246,7 +240,6 @@
         }
     }
 
-    // 2. Рисуем календарь на основе реальных дат
     function renderCalendar() {
         const grid = document.getElementById("calendarGrid");
         grid.innerHTML = `
@@ -277,7 +270,6 @@
         }
     }
 
-    // 3. При клике на дату загружаем реальные слоты времени
     async function selectDate(dateStr, element) {
         document.querySelectorAll(".day-cell").forEach(el => el.classList.remove("selected"));
         element.classList.add("selected");
@@ -293,18 +285,16 @@
         await loadTimeSlots(dateStr);
     }
 
-    // 4. Запрос реального времени из БД
     async function loadTimeSlots(dateStr) {
         const grid = document.getElementById("timeGrid");
-        grid.innerHTML = "<small style='color:var(--text-muted)'>Загрузка времени...</small>";
+        grid.innerHTML = "<small style='color:var(--text-muted)'>Загрузка...</small>";
 
         const res = await fetch(`/api/slots?date=${dateStr}`);
         const data = await res.json();
-        
         grid.innerHTML = "";
 
         if (!data.slots || data.slots.length === 0) {
-            grid.innerHTML = "<small style='color:var(--text-muted)'>Нет свободных окон на эту дату</small>";
+            grid.innerHTML = "<small style='color:var(--text-muted)'>Нет свободных окон</small>";
             return;
         }
 
@@ -325,9 +315,7 @@
     function checkValidation() {
         const name = document.getElementById("clientName").value.trim();
         const phone = document.getElementById("clientPhone").value.trim();
-        const btn = document.getElementById("submitBtn");
-
-        btn.disabled = !(selectedDate && selectedTime && name && phone);
+        document.getElementById("submitBtn").disabled = !(selectedDate && selectedTime && name && phone);
     }
 
     document.getElementById("clientName").addEventListener("input", checkValidation);
@@ -351,7 +339,7 @@
         });
 
         if (res.ok) {
-            alert("✨ Запись успешно создана! Бот пришлет вам подтверждение.");
+            alert("✨ Запись успешно создана!");
             if (tg) tg.close();
             location.reload();
         } else {
@@ -360,7 +348,6 @@
         }
     }
 
-    // Инициализация при старте
     loadAvailableDates();
 </script>
 </body>
