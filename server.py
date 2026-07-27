@@ -1,175 +1,354 @@
-import sqlite3
-import asyncio
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from typing import Optional
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сахарок_nails — Запись</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: #FFF5F7;
+            --card-bg: #FFFFFF;
+            --accent-pink: #FF85A1;
+            --accent-pink-hover: #F26B8A;
+            --text-dark: #4A4A4A;
+            --text-muted: #888888;
+            --green-available: #E8F5E9;
+            --green-text: #2E7D32;
+            --disabled-gray: #F0F0F0;
+        }
 
-from bot import bot, dp, ADMIN_CHAT_ID
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 16px;
+        }
 
-# Инициализация базы данных SQLite
-def init_db():
-    conn = sqlite3.connect("studio.db")
-    cursor = conn.cursor()
-    
-    # Таблица свободных слотов
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS slots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            time TEXT NOT NULL
-        )
-    """)
-    
-    # Таблица записей клиентов
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS bookings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            service_name TEXT NOT NULL,
-            price INTEGER NOT NULL,
-            date TEXT NOT NULL,
-            time TEXT NOT NULL,
-            user_name TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            telegram_username TEXT,
-            reminded_24h INTEGER DEFAULT 0,
-            reminded_3h INTEGER DEFAULT 0
-        )
-    """)
-    
-    conn.commit()
-    conn.close()
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+        }
 
-init_db()
+        h2 {
+            text-align: center;
+            color: var(--accent-pink-hover);
+            margin-bottom: 20px;
+        }
 
-# Фоновый запуск Telegram-бота вместе с сервером FastAPI
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    polling_task = asyncio.create_task(dp.start_polling(bot))
-    yield
-    polling_task.cancel()
-    await bot.session.close()
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 4px 15px rgba(255, 133, 161, 0.12);
+            margin-bottom: 16px;
+        }
 
-app = FastAPI(lifespan=lifespan)
+        /* КАЛЕНДАРЬ */
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            margin-bottom: 12px;
+        }
 
-# Pydantic модели
-class SlotRequest(BaseModel):
-    date: str
-    time: str
+        .calendar-legend {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            margin-bottom: 14px;
+            background: #FAFAFA;
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: var(--text-muted);
+        }
 
-class BookingRequest(BaseModel):
-    service_name: str
-    price: int
-    date: str
-    time: str
-    user_name: str
-    phone: str
-    telegram_username: Optional[str] = ""
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
 
-# --- СТРАНИЦЫ ---
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
 
-@app.get("/", response_class=HTMLResponse)
-def read_root():
-    with open("index.html", "r", encoding="utf-8") as f:
-        return f.read()
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 6px;
+            text-align: center;
+        }
 
-@app.get("/admin", response_class=HTMLResponse)
-def read_admin():
-    with open("admin.html", "r", encoding="utf-8") as f:
-        return f.read()
+        .day-name {
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--text-muted);
+            padding-bottom: 4px;
+        }
 
-# --- API ЭНДПОИНТЫ ---
+        .day-cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
 
-# 1. Получить список дат, где есть свободные окна (для календаря)
-@app.get("/api/available-dates")
-def get_available_dates():
-    conn = sqlite3.connect("studio.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT date FROM slots ORDER BY date")
-    rows = cursor.fetchall()
-    conn.close()
-    return {"dates": [r[0] for r in rows]}
+        .day-cell.available {
+            background-color: var(--green-available);
+            color: var(--green-text);
+            border: 1px solid #A5D6A7;
+            font-weight: 600;
+        }
 
-# 2. Получить свободные слоты времени на конкретную дату
-@app.get("/api/slots")
-def get_slots(date: str):
-    conn = sqlite3.connect("studio.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT time FROM slots WHERE date = ? ORDER BY time", (date,))
-    rows = cursor.fetchall()
-    conn.close()
-    return {"slots": [r[0] for r in rows]}
+        .day-cell.disabled {
+            background-color: var(--disabled-gray);
+            color: #C0C0C0;
+            cursor: not-allowed;
+        }
 
-# 3. Добавить новое окно (из админки)
-@app.post("/api/admin/add-slot")
-def add_slot(slot: SlotRequest):
-    conn = sqlite3.connect("studio.db")
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO slots (date, time) VALUES (?, ?)", (slot.date, slot.time))
-    conn.commit()
-    conn.close()
-    return {"status": "ok"}
+        .day-cell.selected {
+            background-color: var(--accent-pink) !important;
+            color: white !important;
+            border: none !important;
+            box-shadow: 0 2px 8px rgba(255, 133, 161, 0.4);
+        }
 
-# 4. Создать новую запись клиента
-@app.post("/api/book")
-async def book_slot(data: BookingRequest):
-    conn = sqlite3.connect("studio.db")
-    cursor = conn.cursor()
-    
-    # Проверяем наличие слота
-    cursor.execute("SELECT id FROM slots WHERE date = ? AND time = ?", (data.date, data.time))
-    slot = cursor.fetchone()
-    
-    if not slot:
-        conn.close()
-        raise HTTPException(status_code=400, detail="Слот уже занят или недоступен")
-    
-    # Удаляем из свободных окон
-    cursor.execute("DELETE FROM slots WHERE date = ? AND time = ?", (data.date, data.time))
-    
-    # Сохраняем бронирование
-    cursor.execute("""
-        INSERT INTO bookings (service_name, price, date, time, user_name, phone, telegram_username)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (data.service_name, data.price, data.date, data.time, data.user_name, data.phone, data.telegram_username))
-    
-    conn.commit()
-    conn.close()
+        /* СЕТКА ВРЕМЕНИ */
+        .time-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
 
-    # Мгновенное уведомление администратору в Telegram
-    admin_text = (
-        f"💅 **Новая запись!**\n\n"
-        f"✨ **Услуга:** {data.service_name} ({data.price} ₽)\n"
-        f"📅 **Дата и время:** {data.date} в {data.time}\n"
-        f"👤 **Клиент:** {data.user_name}\n"
-        f"📞 **Телефон:** {data.phone}\n"
-        f"💬 **Telegram:** {data.telegram_username}"
-    )
-    
-    try:
-        if ADMIN_CHAT_ID != 2001448448:
-            await bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text, parse_mode="Markdown")
-    except Exception as e:
-        print(f"Ошибка отправки уведомления админу: {e}")
+        .time-slot {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #E0E0E0;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
 
-    return {"status": "ok"}
+        .time-slot.selected {
+            background: var(--accent-pink);
+            color: white;
+            border-color: var(--accent-pink);
+        }
 
-# 5. Список всех записей клиентов (для админки)
-@app.get("/api/admin/bookings")
-def get_bookings():
-    conn = sqlite3.connect("studio.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, service_name, price, date, time, user_name, phone, telegram_username FROM bookings ORDER BY date, time")
-    rows = cursor.fetchall()
-    conn.close()
-    
-    result = []
-    for r in rows:
-        result.append({
-            "id": r[0], "service_name": r[1], "price": r[2],
-            "date": r[3], "time": r[4], "user_name": r[5],
-            "phone": r[6], "telegram_username": r[7]
-        })
-    return {"bookings": result}
+        .btn-submit {
+            width: 100%;
+            background: var(--accent-pink);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+
+        .btn-submit:disabled {
+            background: #CCCCCC;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>✨ Запись в Сахарок_nails</h2>
+
+    <!-- Шаг 1: Услуга -->
+    <div class="card">
+        <label><b>1. Выберите услугу:</b></label>
+        <select id="serviceSelect" style="width:100%; padding:10px; margin-top:8px; border-radius:8px;">
+            <option value="Маникюр + Гель-лак">Маникюр + Гель-лак (2 200 ₽)</option>
+            <option value="Наращивание ногтей">Наращивание ногтей (3 500 ₽)</option>
+            <option value="Снятие + Гигиена">Снятие + Гигиена (1 200 ₽)</option>
+        </select>
+    </div>
+
+    <!-- Шаг 2: Календарь -->
+    <div class="card">
+        <div class="calendar-header">
+            <span id="monthTitle">Выберите дату</span>
+        </div>
+
+        <div class="calendar-legend">
+            <div class="legend-item">
+                <div class="legend-dot" style="background:#A5D6A7;"></div>
+                <span>Есть окна</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background:#C0C0C0;"></div>
+                <span>Нет мест</span>
+            </div>
+        </div>
+
+        <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+
+    <!-- Шаг 3: Выбор времени -->
+    <div class="card" id="timeSection" style="display:none;">
+        <label><b>3. Доступное время на <span id="selectedDateText"></span>:</b></label>
+        <div class="time-grid" id="timeGrid"></div>
+    </div>
+
+    <!-- Шаг 4: Контакты -->
+    <div class="card">
+        <label><b>4. Ваши контакты:</b></label>
+        <input type="text" id="clientName" placeholder="Ваше имя" style="width:90%; padding:10px; margin-top:8px; margin-bottom:8px; border-radius:8px; border:1px solid #ddd;">
+        <input type="text" id="clientPhone" placeholder="Номер телефона (+7...)" style="width:90%; padding:10px; border-radius:8px; border:1px solid #ddd;">
+    </div>
+
+    <button class="btn-submit" id="submitBtn" onclick="sendBooking()" disabled>Подтвердить запись</button>
+
+    <!-- Плашка отмены записи -->
+    <div class="info-box" style="background: #FFF8F9; border: 1px dashed var(--accent-pink); border-radius: 14px; padding: 14px; font-size: 13px; color: var(--text-dark); line-height: 1.5; margin-top: 16px;">
+        💬 <b>Нужно перенести или отменить запись?</b><br>
+        Напишите нашему Telegram-боту или свяжитесь с администратором.
+    </div>
+</div>
+
+<script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) tg.expand();
+
+    let availableDates = [];
+    let selectedDate = null;
+    let selectedTime = null;
+
+    async function loadAvailableDates() {
+        try {
+            const res = await fetch("/api/available-dates");
+            const data = await res.json();
+            availableDates = data.dates || [];
+            renderCalendar();
+        } catch (err) {
+            console.error("Ошибка загрузки дат:", err);
+        }
+    }
+
+    function renderCalendar() {
+        const grid = document.getElementById("calendarGrid");
+        grid.innerHTML = `
+            <div class="day-name">Пн</div><div class="day-name">Вт</div><div class="day-name">Ср</div>
+            <div class="day-name">Чт</div><div class="day-name">Пт</div><div class="day-name">Сб</div><div class="day-name">Вс</div>
+        `;
+
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = today.getMonth();
+
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        for (let i = 1; i <= daysInMonth; i++) {
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+            const dayEl = document.createElement("div");
+            dayEl.classList.add("day-cell");
+            dayEl.innerText = i;
+
+            if (availableDates.includes(dateStr)) {
+                dayEl.classList.add("available");
+                dayEl.onclick = () => selectDate(dateStr, dayEl);
+            } else {
+                dayEl.classList.add("disabled");
+            }
+
+            grid.appendChild(dayEl);
+        }
+    }
+
+    async function selectDate(dateStr, element) {
+        document.querySelectorAll(".day-cell").forEach(el => el.classList.remove("selected"));
+        element.classList.add("selected");
+        
+        selectedDate = dateStr;
+        selectedTime = null;
+        checkValidation();
+
+        const [y, m, d] = dateStr.split('-');
+        document.getElementById("selectedDateText").innerText = `${d}.${m}.${y}`;
+        document.getElementById("timeSection").style.display = "block";
+        
+        await loadTimeSlots(dateStr);
+    }
+
+    async function loadTimeSlots(dateStr) {
+        const grid = document.getElementById("timeGrid");
+        grid.innerHTML = "<small style='color:var(--text-muted)'>Загрузка...</small>";
+
+        const res = await fetch(`/api/slots?date=${dateStr}`);
+        const data = await res.json();
+        grid.innerHTML = "";
+
+        if (!data.slots || data.slots.length === 0) {
+            grid.innerHTML = "<small style='color:var(--text-muted)'>Нет свободных окон</small>";
+            return;
+        }
+
+        data.slots.forEach(slot => {
+            const btn = document.createElement("div");
+            btn.classList.add("time-slot");
+            btn.innerText = slot;
+            btn.onclick = () => {
+                document.querySelectorAll(".time-slot").forEach(el => el.classList.remove("selected"));
+                btn.classList.add("selected");
+                selectedTime = slot;
+                checkValidation();
+            };
+            grid.appendChild(btn);
+        });
+    }
+
+    function checkValidation() {
+        const name = document.getElementById("clientName").value.trim();
+        const phone = document.getElementById("clientPhone").value.trim();
+        document.getElementById("submitBtn").disabled = !(selectedDate && selectedTime && name && phone);
+    }
+
+    document.getElementById("clientName").addEventListener("input", checkValidation);
+    document.getElementById("clientPhone").addEventListener("input", checkValidation);
+
+    async function sendBooking() {
+        const payload = {
+            service_name: document.getElementById("serviceSelect").value,
+            price: document.getElementById("serviceSelect").value.includes("Наращивание") ? 3500 : 2200,
+            date: selectedDate,
+            time: selectedTime,
+            user_name: document.getElementById("clientName").value,
+            phone: document.getElementById("clientPhone").value,
+            telegram_username: tg?.initDataUnsafe?.user?.username ? `@${tg.initDataUnsafe.user.username}` : "@customer"
+        };
+
+        const res = await fetch("/api/book", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            alert("✨ Запись успешно создана!");
+            if (tg) tg.close();
+            location.reload();
+        } else {
+            const err = await res.json();
+            alert("❌ " + (err.detail || "Ошибка при бронировании."));
+        }
+    }
+
+    loadAvailableDates();
+</script>
+</body>
+</html>
