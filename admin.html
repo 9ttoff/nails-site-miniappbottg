@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админка | Сахарок_nails</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #faf5f6;
+            --card-bg: #ffffff;
+            --accent-pink: #e0829d;
+            --light-pink: #fbebee;
+            --text-main: #2d2628;
+            --text-muted: #887b7e;
+            --border-color: #f0e2e5;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px 16px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 460px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 8px 24px rgba(224, 130, 157, 0.08);
+            border: 1px solid var(--border-color);
+        }
+
+        label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        input[type="date"], input[type="time"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 15px;
+            box-sizing: border-box;
+            margin-bottom: 12px;
+        }
+
+        .btn-add {
+            width: 100%;
+            padding: 14px;
+            background: #2e7d32;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-cancel-booking {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        .booking-item {
+            background: #faf5f6;
+            border-left: 4px solid var(--accent-pink);
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+        }
+
+        .date-group {
+            margin-bottom: 14px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .date-title {
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--text-main);
+            margin-bottom: 8px;
+        }
+
+        .slots-flex {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag-slot {
+            background: var(--light-pink);
+            color: var(--accent-pink);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="color: var(--accent-pink); text-align: center;">👑 Сахарок_nails • Админка</h2>
+
+    <!-- БЛОК 1: Записи клиентов -->
+    <div class="card">
+        <h3 style="margin-top:0;">📋 Активные записи клиентов</h3>
+        <div id="bookings-container">Загрузка...</div>
+    </div>
+
+    <!-- БЛОК 2: Добавление окон -->
+    <div class="card">
+        <h3 style="margin-top:0;">➕ Открыть новое окно</h3>
+        <label>Дата</label>
+        <input type="date" id="add-date">
+
+        <label>Время</label>
+        <input type="time" id="add-time">
+
+        <button class="btn-add" onclick="addSlot()">Добавить слот</button>
+    </div>
+
+    <!-- БЛОК 3: Все свободные окна -->
+    <div class="card">
+        <h3 style="margin-top:0;">🕒 Свободные окошки</h3>
+        <p style="font-size: 12px; color: var(--text-muted);">(Нажмите на время, чтобы удалить окно)</p>
+        <div id="all-slots-container">Загрузка...</div>
+    </div>
+</div>
+
+<script>
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('add-date').value = today;
+
+    async function loadBookings() {
+        const res = await fetch('/api/admin/bookings');
+        if (!res.ok) return;
+        const data = await res.json();
+        const container = document.getElementById('bookings-container');
+        container.innerHTML = '';
+
+        if (data.bookings.length === 0) {
+            container.innerHTML = '<small style="color:var(--text-muted);">Записей пока нет</small>';
+            return;
+        }
+
+        data.bookings.forEach(b => {
+            const item = document.createElement('div');
+            item.className = 'booking-item';
+            item.innerHTML = `
+                <b>👤 ${b.user_name}</b> (${b.telegram_username})<br>
+                📞 <b>Тел:</b> ${b.phone}<br>
+                📅 <b>${formatDate(b.date)} в ${b.time}</b><br>
+                💅 <b>Услуга:</b> ${b.service_name} (${b.price} ₽)<br>
+                <button class="btn-cancel-booking" onclick="cancelBooking(${b.id})">❌ Отменить запись (освободить окно)</button>
+            `;
+            container.appendChild(item);
+        });
+    }
+
+    async function cancelBooking(id) {
+        if (!confirm("Вы уверены, что хотите отменить эту запись? Окно автоматически станет свободным.")) return;
+
+        const res = await fetch('/api/admin/cancel-booking', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ booking_id: id })
+        });
+
+        if (res.ok) {
+            loadBookings();
+            loadAllSlots();
+        }
+    }
+
+    async function loadAllSlots() {
+        const res = await fetch('/api/admin/all-slots');
+        if (!res.ok) return;
+        const data = await res.json();
+        const container = document.getElementById('all-slots-container');
+        container.innerHTML = '';
+
+        const dates = Object.keys(data.slots_by_date);
+        if (dates.length === 0) {
+            container.innerHTML = '<small style="color:var(--text-muted);">Нет свободных окон</small>';
+            return;
+        }
+
+        dates.forEach(date => {
+            const group = document.createElement('div');
+            group.className = 'date-group';
+
+            const title = document.createElement('div');
+            title.className = 'date-title';
+            title.innerText = "📅 " + formatDate(date);
+            group.appendChild(title);
+
+            const flex = document.createElement('div');
+            flex.className = 'slots-flex';
+
+            data.slots_by_date[date].forEach(time => {
+                const tag = document.createElement('div');
+                tag.className = 'tag-slot';
+                tag.innerText = time + " ✕";
+                tag.onclick = () => deleteSlot(date, time);
+                flex.appendChild(tag);
+            });
+
+            group.appendChild(flex);
+            container.appendChild(group);
+        });
+    }
+
+    async function addSlot() {
+        const date = document.getElementById('add-date').value;
+        const time = document.getElementById('add-time').value;
+
+        if (!date || !time) return alert("Выберите дату и время!");
+
+        const res = await fetch('/api/admin/add-slot', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ date, time })
+        });
+
+        if (res.ok) {
+            loadAllSlots();
+        } else {
+            const err = await res.json();
+            alert(err.detail);
+        }
+    }
+
+    async function deleteSlot(date, time) {
+        if (!confirm(`Удалить окно ${date} в ${time}?`)) return;
+
+        await fetch('/api/admin/delete-slot', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ date, time })
+        });
+
+        loadAllSlots();
+    }
+
+    function formatDate(str) {
+        const [y, m, d] = str.split('-');
+        return `${d}.${m}.${y}`;
+    }
+
+    loadBookings();
+    loadAllSlots();
+</script>
+</body>
+</html>
