@@ -225,20 +225,34 @@
     const tg = window.Telegram?.WebApp;
     if (tg) tg.expand();
 
-    // Симуляция доступных дат с бэкенда (формат YYYY-MM-DD)
-    const availableDates = ["2026-07-28", "2026-07-29", "2026-07-31", "2026-08-01", "2026-08-03"];
-    const timeSlots = ["10:00", "12:30", "15:00", "17:30", "20:00"];
-
+    let availableDates = [];
     let selectedDate = null;
     let selectedTime = null;
 
+    // 1. Загружаем реальные доступные даты из БД
+    async function loadAvailableDates() {
+        try {
+            const res = await fetch("/api/available-dates");
+            const data = await res.json();
+            availableDates = data.dates || [];
+            renderCalendar();
+        } catch (err) {
+            console.error("Ошибка загрузки дат:", err);
+        }
+    }
+
+    // 2. Рисуем календарь на основе реальных дат
     function renderCalendar() {
         const grid = document.getElementById("calendarGrid");
+        grid.innerHTML = `
+            <div class="day-name">Пн</div><div class="day-name">Вт</div><div class="day-name">Ср</div>
+            <div class="day-name">Чт</div><div class="day-name">Пт</div><div class="day-name">Сб</div><div class="day-name">Вс</div>
+        `;
+
         const today = new Date();
         const year = today.getFullYear();
         const month = today.getMonth();
 
-        // Заполняем сетку днями текущего месяца
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
         for (let i = 1; i <= daysInMonth; i++) {
@@ -258,23 +272,38 @@
         }
     }
 
-    function selectDate(dateStr, element) {
+    // 3. При клике на дату загружаем реальные слоты времени
+    async function selectDate(dateStr, element) {
         document.querySelectorAll(".day-cell").forEach(el => el.classList.remove("selected"));
         element.classList.add("selected");
-
+        
         selectedDate = dateStr;
-        document.getElementById("selectedDateText").innerText = dateStr;
-        document.getElementById("timeSection").style.display = "block";
-
-        renderTimeSlots();
+        selectedTime = null;
         checkValidation();
+
+        const [y, m, d] = dateStr.split('-');
+        document.getElementById("selectedDateText").innerText = `${d}.${m}.${y}`;
+        document.getElementById("timeSection").style.display = "block";
+        
+        await loadTimeSlots(dateStr);
     }
 
-    function renderTimeSlots() {
+    // 4. Запрос реального времени из БД
+    async function loadTimeSlots(dateStr) {
         const grid = document.getElementById("timeGrid");
+        grid.innerHTML = "<small style='color:var(--text-muted)'>Загрузка времени...</small>";
+
+        const res = await fetch(`/api/slots?date=${dateStr}`);
+        const data = await res.json();
+        
         grid.innerHTML = "";
 
-        timeSlots.forEach(slot => {
+        if (!data.slots || data.slots.length === 0) {
+            grid.innerHTML = "<small style='color:var(--text-muted)'>Нет свободных окон на эту дату</small>";
+            return;
+        }
+
+        data.slots.forEach(slot => {
             const btn = document.createElement("div");
             btn.classList.add("time-slot");
             btn.innerText = slot;
@@ -293,11 +322,7 @@
         const phone = document.getElementById("clientPhone").value.trim();
         const btn = document.getElementById("submitBtn");
 
-        if (selectedDate && selectedTime && name && phone) {
-            btn.disabled = false;
-        } else {
-            btn.disabled = true;
-        }
+        btn.disabled = !(selectedDate && selectedTime && name && phone);
     }
 
     document.getElementById("clientName").addEventListener("input", checkValidation);
@@ -305,12 +330,13 @@
 
     async function sendBooking() {
         const payload = {
-            service: document.getElementById("serviceSelect").value,
+            service_name: document.getElementById("serviceSelect").value,
+            price: document.getElementById("serviceSelect").value.includes("Наращивание") ? 3500 : 2200,
             date: selectedDate,
             time: selectedTime,
-            name: document.getElementById("clientName").value,
+            user_name: document.getElementById("clientName").value,
             phone: document.getElementById("clientPhone").value,
-            telegram_username: tg?.initDataUnsafe?.user?.username || ""
+            telegram_username: tg?.initDataUnsafe?.user?.username ? `@${tg.initDataUnsafe.user.username}` : "@customer"
         };
 
         const res = await fetch("/api/book", {
@@ -322,12 +348,15 @@
         if (res.ok) {
             alert("✨ Запись успешно создана! Бот пришлет вам подтверждение.");
             if (tg) tg.close();
+            location.reload();
         } else {
-            alert("Ошибка при бронировании. Попробуйте еще раз.");
+            const err = await res.json();
+            alert("❌ " + (err.detail || "Ошибка при бронировании."));
         }
     }
 
-    renderCalendar();
+    // Инициализация при старте
+    loadAvailableDates();
 </script>
 </body>
 </html>
