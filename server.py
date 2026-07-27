@@ -42,7 +42,6 @@ init_db()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Запускаем фоновый опрос телеграм-бота при старте сервера
     polling_task = asyncio.create_task(dp.start_polling(bot))
     yield
     polling_task.cancel()
@@ -67,13 +66,19 @@ class BookingRequest(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 def read_root():
-    with open("index.html", "r", encoding="utf-8") as f:
-        return f.read()
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"<h1>Ошибка чтения index.html: {e}</h1>"
 
 @app.get("/admin", response_class=HTMLResponse)
 def read_admin():
-    with open("admin.html", "r", encoding="utf-8") as f:
-        return f.read()
+    try:
+        with open("admin.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"<h1>Ошибка чтения admin.html: {e}</h1>"
 
 # --- API ---
 
@@ -94,6 +99,18 @@ def get_slots(date: str):
     rows = cursor.fetchall()
     conn.close()
     return {"slots": [r[0] for r in rows]}
+
+# Все свободные слоты для панели администратора
+@app.get("/api/admin/all-slots")
+def get_all_slots():
+    conn = sqlite3.connect("studio.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, date, time FROM slots ORDER BY date, time")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    result = [{"id": r[0], "date": r[1], "time": r[2]} for r in rows]
+    return {"slots": result}
 
 @app.post("/api/admin/add-slot")
 def add_slot(slot: SlotRequest):
@@ -127,17 +144,17 @@ async def book_slot(data: BookingRequest):
     conn.close()
 
     admin_text = (
-        f"💅 **Новая запись!**\n\n"
-        f"✨ **Услуга:** {data.service_name} ({data.price} ₽)\n"
-        f"📅 **Дата и время:** {data.date} в {data.time}\n"
-        f"👤 **Клиент:** {data.user_name}\n"
-        f"📞 **Телефон:** {data.phone}\n"
-        f"💬 **Telegram:** {data.telegram_username}"
+        f"💅 <b>Новая запись!</b>\n\n"
+        f"✨ <b>Услуга:</b> {data.service_name} ({data.price} ₽)\n"
+        f"📅 <b>Дата и время:</b> {data.date} в {data.time}\n"
+        f"👤 <b>Клиент:</b> {data.user_name}\n"
+        f"📞 <b>Телефон:</b> {data.phone}\n"
+        f"💬 <b>Telegram:</b> {data.telegram_username}"
     )
     
     try:
         if ADMIN_CHAT_ID != 2001448448:
-            await bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text, parse_mode="Markdown")
+            await bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text, parse_mode="HTML")
     except Exception as e:
         print(f"Ошибка отправки уведомления админу: {e}")
 
