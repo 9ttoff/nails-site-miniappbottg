@@ -6,16 +6,14 @@ from aiogram.filters import CommandStart
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# === НАСТРОЙКИ ===
 BOT_TOKEN = "8840715635:AAHdEpXvasiY9IeQKcjXXrM6Vxi7veCxLqw"  # Токен от @BotFather
-ADMIN_CHAT_ID = 2001448448        # Твой числовой ID от @userinfobot
+ADMIN_CHAT_ID = 2001448448          # Твой численный ID
 WEBAPP_URL = "https://saharok-nails.onrender.com"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
 
-# === КЛАВИАТУРА ===
 def get_main_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -29,8 +27,6 @@ def get_main_keyboard():
             InlineKeyboardButton(text="💸 Отмена и возврат", callback_data="refund")
         ]
     ])
-
-# === ОБРАБОТЧИКИ КОМАНД ===
 
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
@@ -60,9 +56,6 @@ async def show_refund_info(callback: types.CallbackQuery):
     )
     await callback.message.edit_text(refund_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
-
-# === ПЛАНИРОВЩИК НАПОМИНАНИЙ (24ч и 3ч) ===
-
 async def check_and_send_reminders():
     conn = sqlite3.connect("studio.db")
     cursor = conn.cursor()
@@ -86,7 +79,6 @@ async def check_and_send_reminders():
         
         clean_tg = tg_user.replace("@", "").strip()
 
-        # Напоминание за 24 часа
         if timedelta(hours=23) <= time_diff <= timedelta(hours=25) and not r_24h:
             msg = f"🌸 **Напоминание!** Завтра в **{b_time}** у вас запись в Сахарок_nails ({service})."
             try:
@@ -96,7 +88,6 @@ async def check_and_send_reminders():
             except Exception as e:
                 print(f"Ошибка отправки 24h: {e}")
 
-        # Напоминание за 3 часа
         if timedelta(hours=2.5) <= time_diff <= timedelta(hours=3.5) and not r_3h:
             msg = f"✨ **Уже скоро!** Сегодня в **{b_time}** ждем вас в Сахарок_nails ({service})."
             try:
@@ -108,5 +99,9 @@ async def check_and_send_reminders():
 
     conn.close()
 
-scheduler.add_job(check_and_send_reminders, 'interval', minutes=10)
-scheduler.start()
+# Запуск планировщика при старте бота в активном event loop
+@dp.startup()
+async def on_startup():
+    if not scheduler.running:
+        scheduler.add_job(check_and_send_reminders, 'interval', minutes=10)
+        scheduler.start()
