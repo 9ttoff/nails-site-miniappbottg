@@ -94,7 +94,16 @@ def get_slots(date: str):
     conn.close()
     return {"slots": [r[0] for r in rows]}
 
-
+@app.get("/api/available-dates")
+def get_available_dates():
+    conn = sqlite3.connect("studio.db")
+    cursor = conn.cursor()
+    # Получаем уникальные даты, у которых есть свободные слоты
+    cursor.execute("SELECT DISTINCT date FROM slots ORDER BY date")
+    rows = cursor.fetchall()
+    conn.close()
+    return {"dates": [r[0] for r in rows]}
+    
 @app.get("/api/admin/all-slots")
 def get_all_slots(username: str = Depends(auth_admin)):
     conn = sqlite3.connect("studio.db")
